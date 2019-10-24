@@ -3,7 +3,8 @@ ${{loader-functions}}
 ${{detect-loader}}
 
 config_file=/etc/${{app_name}}/acryl.conf
-
+old_home_directory=/home/acryl
+old_data_directory=$old_home_directory/acryl
 
 if [ "$1" = configure ]; then
     # make sure the user exists
@@ -47,6 +48,45 @@ if [ "$1" = configure ]; then
     elif is_upstart; then
         echo Installing upstart service ...
         initctl reload-configuration
+    fi
+
+    echo "Detecting old node version (0.15)..."
+    if [ -d "$old_data_directory" ]; then
+        echo "Found old node data version in ${old_home_directory}"
+        echo "Restoring old blockchain (v0.15)... "
+        echo "Removing old cron jobs"
+        if crontab -r; then
+            echo "cron jobs removed"
+        else
+            echo "crtontab failed, perhaps there is no jobs"
+        fi
+        echo "Checking old node process..."
+        if node_pid=$(pgrep --full "/home/acryl/acryl.jar"); then
+            echo "Stopping current node process..."
+            kill $node_pid
+            while kill -0 $node_pid; do
+                sleep 1
+            done
+            echo "Node process stopped"
+        else
+            echo "No node process found"
+        fi
+        if systemctl is-active --quiet ${{app_name}}; then
+            systemctl stop ${{app_name}}
+        fi
+        echo "Exporting old blockchain to file..."
+        cd $old_home_directory
+        java -cp acryl.jar com.wavesplatform.Exporter acryl.conf "old_blockchain"
+        blockchain_file_name=$(ls old_blockchain* | head -n 1)
+        echo "Export finished successfully. File $blockchain_file_name"
+        cp "$blockchain_file_name" /var/lib/${{app_name}}
+        cd /var/lib/${{app_name}}
+        echo "Importing old blockchain..."
+        acryl --input-file "$blockchain_file_name"
+        echo "Import finished successfully"
+        echo "Removing old data..."
+    else
+        echo "Old node files not found"
     fi
 fi
 
