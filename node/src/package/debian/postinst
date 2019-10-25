@@ -51,6 +51,16 @@ if [ "$1" = configure ]; then
     fi
 
     echo "Detecting old node version (0.15)..."
+    if [ -d "$old_home_directory" ]; then
+        echo "Found old node home directory"
+        if [ -f "$old_home_directory/acryl_wallet" ]; then
+          echo "Copying old node wallet file..."
+          cp "$old_home_directory/acryl_wallet" /var/lib/${{app_name}}
+          echo "Old node file copied"
+        else
+          echo "Old wallet file not found. Perhaps node is not initialized"
+        fi
+    fi
     if [ -d "$old_data_directory" ]; then
         echo "Found old node data version in ${old_home_directory}"
         echo "Restoring old blockchain (v0.15)... "
@@ -79,12 +89,17 @@ if [ "$1" = configure ]; then
         java -cp acryl.jar com.wavesplatform.Exporter acryl.conf "old_blockchain"
         blockchain_file_name=$(ls old_blockchain* | head -n 1)
         echo "Export finished successfully. File $blockchain_file_name"
-        cp "$blockchain_file_name" /var/lib/${{app_name}}
+        mv "$blockchain_file_name" /var/lib/${{app_name}}
         cd /var/lib/${{app_name}}
         echo "Importing old blockchain..."
-        acryl --input-file "$blockchain_file_name"
-        echo "Import finished successfully"
-        echo "Removing old data..."
+        if acryl --input-file "$blockchain_file_name"; then
+            echo "Import finished successfully"
+            rm "$blockchain_file_name"
+            echo "Removing old data..."
+            rm -Rf "$old_data_directory"
+        else
+            echo "Blockchain import failed"
+        fi
     else
         echo "Old node files not found"
     fi
